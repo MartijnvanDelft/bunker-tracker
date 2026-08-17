@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bunker Locatie Tracker 28.2</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .page {
+            display: none;
+            flex: 1;
+            overflow: auto;
+        }
+        .page.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Login pagina */
+        #loginPage {
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        .login-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .login-card h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #333;
+            text-align: center;
+        }
+        .login-card p {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #5568d3;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        /* Kaart pagina */
+        #mapPage {
+            flex-direction: column;
+        }
+        .map-header {
+            background: white;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .map-header h2 {
+            font-size: 16px;
+            color: #333;
+        }
+        .btn-small {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-small:hover {
+            background: #5568d3;
+        }
+        .btn-small.secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .btn-small.secondary:hover {
+            background: #e0e0e0;
+        }
+        #mapContainer {
+            flex: 1;
+            position: relative;
+        }
+        .leaflet-container {
+            height: 100%;
+            width: 100%;
+        }
+        .leaflet-control-layers {
+            border-radius: 8px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+        }
+        .leaflet-control-layers label {
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .leaflet-control-layers-scrollbar {
+            overflow-y: auto;
+            max-height: 200px;
+        }
+        .location-info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 12px;
+            max-width: 90%;
+            z-index: 5;
+        }
+        
+        /* Dialoog */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-content h3 {
+            font-size: 18px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        .modal-content p {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .modal-info {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .boolean-choice {
+            margin: 14px 0 20px 0;
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .boolean-choice-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .boolean-choice-options {
+            display: flex;
+            gap: 12px;
+        }
+        .boolean-choice-options label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            background: white;
+        }
+        .boolean-choice-options input {
+            width: auto;
+        }
+        .aantal-choice {
+            margin: 0 0 20px 0;
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .aantal-choice-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .aantal-choice input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+        }
+        .aantal-choice input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .person-choice {
+            margin: 0 0 20px 0;
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .person-choice-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .person-choice select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+        }
+        .person-choice select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-buttons .btn-yes {
+            background: #4CAF50;
+            color: white;
+        }
+        .modal-buttons .btn-yes:hover {
+            background: #45a049;
+        }
+        .modal-buttons .btn-no {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .modal-buttons .btn-no:hover {
+            background: #e0e0e0;
+        }
+        
+        /* Lijst pagina */
+        #listPage {
+            flex-direction: column;
+            padding: 12px;
+        }
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .list-header h2 {
+            font-size: 18px;
+            color: #333;
+        }
+        .btn-delete-all {
+            padding: 8px 12px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .btn-delete-all:hover {
+            background: #d32f2f;
+        }
+        .list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .list-item {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .list-item-info h3 {
+            font-size: 15px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .list-item-info p {
+            font-size: 12px;
+            color: #999;
+            margin: 2px 0;
+        }
+        .list-item-time {
+            text-align: right;
+        }
+        .list-item-time .date {
+            font-size: 12px;
+            color: #999;
+        }
+        .list-item-time .time {
+            font-size: 13px;
+            color: #333;
+            font-weight: 600;
+        }
+        .list-item-delete {
+            padding: 6px 10px;
+            background: #ffebee;
+            color: #c62828;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+        .list-item-delete:hover {
+            background: #ffcdd2;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        .empty-state p {
+            font-size: 14px;
+        }
+        
+        /* Status berichten */
+        .status {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 200;
+            animation: slideDown 0.3s ease-out;
+        }
+        .status.success {
+            background: #4CAF50;
+        }
+        .status.error {
+            background: #f44336;
+        }
+        .status.info {
+            background: #2196F3;
+        }
+        @keyframes slideDown {
+            from {
+                transform: translateX(-50%) translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login pagina -->
+        <div id="loginPage" class="page active">
+            <div class="login-card">
+                <h1>⛳ Bunker Tracker V28.2</h1>
+                <p>Locaties vastleggen op de golfbaan</p>
+                <form id="loginForm" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="nameInput">Wat is je naam?</label>
+                        <input 
+                            type="text" 
+                            id="nameInput" 
+                            placeholder="Voer je naam in..." 
+                            required
+                            autocomplete="off"
+                        >
+                    </div>
+                    <button type="submit" class="btn">Inloggen</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Kaart pagina -->
+        <div id="mapPage" class="page">
+            <div class="map-header">
+                <div>
+                    <h2 id="userName">Welkom!</h2>
+                </div>
+                <div>
+                    <button class="btn-small secondary" onclick="goToList()">📋 Lijst</button>
+                    <button class="btn-small secondary" onclick="logout()" style="margin-left: 8px;">🚪 Logout</button>
+                </div>
+            </div>
+            <div id="mapContainer"></div>
+            <div class="location-info">
+                <div id="locationText">Locatie laden...</div>
+            </div>
+        </div>
+        
+        <!-- Lijst pagina -->
+        <div id="listPage" class="page">
+            <div class="list-header">
+                <h2>📋 Opgeslagen locaties</h2>
+                <button class="btn-small secondary" onclick="goToMap()">🗺️ Kaart</button>
+            </div>
+            <div id="listContainer" class="list-container"></div>
+        </div>
+    </div>
+    
+    <!-- Bevestigings dialoog -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h3 id="confirmModalTitle">Bunker toevoegen?</h3>
+            <p id="confirmModalQuestion">Wil je deze bunker toevoegen aan je lijst?</p>
+            <div class="modal-info" id="modalInfo"></div>
+            <div class="boolean-choice">
+                <div class="boolean-choice-title">Bruning?</div>
+                <div class="boolean-choice-options">
+                    <label>
+                        <input type="radio" name="bruningInput" value="true">
+                        Ja
+                    </label>
+                    <label>
+                        <input type="radio" name="bruningInput" value="false" checked>
+                        Nee
+                    </label>
+                </div>
+            </div>
+            <div class="aantal-choice" id="aantalChoice" style="display: none;">
+                <div class="aantal-choice-title">Aantal?</div>
+                <input type="number" id="aantalInput" min="1" max="9" step="1" value="1">
+            </div>
+            <div class="person-choice">
+                <div class="person-choice-title">Wie?</div>
+                <select id="whoInput" size="5" required></select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-yes" onclick="confirmSaveLocation(true)">Opslaan</button>
+                <button class="btn-no" onclick="confirmSaveLocation(false)">Annuleren</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status bericht -->
+    <div id="statusMessage" class="status"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script>
+        // Firebase / Firestore centrale database.
+        // Deze compat-versie werkt direct in een losse HTML-pagina op GitHub Pages.
+        const firebaseConfig = {
+            apiKey: "AIzaSyAmowVAbGv6cqEFKdn_wA8ji2Ga95-8CtI",
+            authDomain: "bunker-tracker-b3b95.firebaseapp.com",
+            projectId: "bunker-tracker-b3b95",
+            storageBucket: "bunker-tracker-b3b95.firebasestorage.app",
+            messagingSenderId: "354730814184",
+            appId: "1:354730814184:web:5f8dfb2bc3f357a850b75d"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const locationsCollection = db.collection('bunker_locations');
+    </script>
+    <script>
+        // State
+        const DEFAULT_LAT = 52.19011481646226;
+        const DEFAULT_LNG = 4.743594724809223;
+        const DEFAULT_ZOOM = 18; // ongeveer 100 x 100 m, afhankelijk van schermgrootte
+        const LAST_USER_KEY = 'bunker-tracker-last-user-name';
+        const ALLOWED_USERS = [
+            'Alfa Daradjat',
+            'Martijn van Delft',
+            'Lars Breukers',
+            'Martijn Koek',
+            'Charles Majoie',
+            'Harry van Mierlo',
+            'Koert Wilmink',
+            'Conrad van Houten',
+            'Danny Hillebrand',
+            'Hugo van der Geest',
+            'Jeroen Bruning',
+            'Mark-Lucas van Delft',
+            'Willem Roelofs'
+        ];
+
+        function normalizeName(name) {
+            return String(name || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function getAllowedUserName(name) {
+            const normalized = normalizeName(name).toLowerCase();
+            return ALLOWED_USERS.find(user => user.toLowerCase() === normalized) || null;
+        }
+
+        function isAllowedUser(name) {
+            return getAllowedUserName(name) !== null;
+        }
+
+        let currentUser = null;
+        let map = null;
+        let userMarker = null;
+        let savedMarkers = [];
+        let bunkerLayer = null;
+        let referencePoints = [
+            { id: 1, name: 'Clubhuis Liemeer', lat: 52.1896, lng: 4.7435 },        
+            { id: 2, name: 'Bunker Torenbaan 1-1', lat: 52.19158181910645, lng: 4.747346584228457 },
+            { id: 3, name: 'Bunker Torenbaan 1-2', lat: 52.192683406475446, lng: 4.745888560363877 }, 
+            { id: 4, name: 'Bunker Torenbaan 1-3', lat: 52.192872106502115, lng: 4.746206680059574 },
+            { id: 5, name: 'Bunker Torenbaan 2-1', lat: 52.19209621792613, lng: 4.745628062801352 },
+            { id: 6, name: 'Bunker Torenbaan 2-2', lat: 52.191860191089326, lng: 4.745259122612535 },
+            { id: 7, name: 'Bunker Torenbaan 3-1', lat: 52.192202039959604, lng: 4.74421767058831 },
+            { id: 8, name: 'Bunker Torenbaan 3-2', lat: 52.19253328014509, lng: 4.744286722895953 },
+            { id: 9, name: 'Bunker Torenbaan 3-3', lat: 52.192725760157145, lng: 4.7446560678579965 },
+            { id: 10, name: 'Bunker Torenbaan 3-4', lat: 52.19283294476631, lng: 4.743831261523907 },
+            { id: 11, name: 'Bunker Torenbaan 3-5', lat: 52.19336672869006, lng: 4.742899919696195 },
+            { id: 12, name: 'Bunker Torenbaan 4-1', lat: 52.193296333622875, lng: 4.745371746940243 },
+            { id: 13, name: 'Bunker Torenbaan 4-2', lat: 52.19374482865179, lng: 4.746025224566334 },
+            { id: 14, name: 'Bunker Torenbaan 4-3', lat: 52.193555291630645, lng: 4.746364278974671 },
+            { id: 15, name: 'Bunker Torenbaan 5-1', lat: 52.1931483027739, lng: 4.746710912646985 },
+            { id: 16, name: 'Bunker Torenbaan 5-2', lat: 52.193107659912506, lng: 4.747304274074713 },
+            { id: 17, name: 'Bunker Torenbaan 5-3', lat: 52.19247470429372, lng: 4.747511196599918 },
+            { id: 18, name: 'Bunker Torenbaan 5-4', lat: 52.19231817235472, lng: 4.747415757690655 },
+            { id: 19, name: 'Bunker Torenbaan 5-5', lat: 52.19221027480502, lng: 4.747729419554493 },
+            { id: 20, name: 'Bunker Torenbaan 5-6', lat: 52.19184894291396, lng: 4.748009330672351 },
+            { id: 21, name: 'Bunker Torenbaan 5-7', lat: 52.191554209937216, lng: 4.7478790945680025 },
+            { id: 22, name: 'Bunker Torenbaan 5-8', lat: 52.191647800191845, lng: 4.748312447784491 },
+            { id: 23, name: 'Bunker Torenbaan 5-9', lat: 52.19146242864255, lng: 4.748344603945581 },
+            { id: 24, name: 'Bunker Torenbaan 6-1', lat: 52.189415249316035, lng: 4.7469243617011685 },
+            { id: 25, name: 'Bunker Torenbaan 6-2', lat: 52.18847585554312, lng: 4.7470860258272864 },
+            { id: 26, name: 'Bunker Torenbaan 6-3', lat: 52.18824951849029, lng: 4.746644660745325 },
+            { id: 27, name: 'Bunker Torenbaan 6-4', lat: 52.18799768002691, lng: 4.7472497311730235 },
+            { id: 28, name: 'Bunker Torenbaan 6-5', lat: 52.18760113329905, lng: 4.747202562727016 },
+            { id: 29, name: 'Bunker Torenbaan 6-6', lat: 52.18747014625691, lng: 4.747191487032878 },
+            { id: 30, name: 'Bunker Torenbaan 6-7', lat: 52.18746331690509, lng: 4.747601574677146 },
+            { id: 31, name: 'Bunker Torenbaan 8-1', lat: 52.18917458763466, lng: 4.747870885283379 },
+            { id: 32, name: 'Bunker Torenbaan 8-2', lat: 52.18928979745471, lng: 4.747279140333281 },
+            { id: 33, name: 'Bunker Torenbaan 8-3', lat: 52.18980265140087, lng: 4.74752251703507 },
+            { id: 34, name: 'Bunker Torenbaan 8-4', lat: 52.19004849473261, lng: 4.74834245515803 },
+            { id: 35, name: 'Bunker Torenbaan 8-5', lat: 52.190201075957866, lng: 4.7480071690872325 },
+            { id: 36, name: 'Bunker Torenbaan 8-6', lat: 52.19040841157318, lng: 4.748794556478886 },
+            { id: 37, name: 'Bunker Torenbaan 8-7', lat: 52.19072414878407, lng: 4.748727450939891 },
+            { id: 38, name: 'Bunker Torenbaan 8-8', lat: 52.190622135073696, lng: 4.749054629053553 },
+            { id: 39, name: 'Bunker Torenbaan 9-1', lat: 52.19045087693081, lng: 4.746305778237906 },
+            { id: 40, name: 'Bunker Torenbaan 9-2', lat: 52.18989200725207, lng: 4.746184118071375 },
+            { id: 41, name: 'Bunker Torenbaan 9-3', lat: 52.190007187372785, lng: 4.745657048183279 },
+            { id: 42, name: 'Bunker Torenbaan 9-4', lat: 52.18977375330139, lng: 4.744870909487307 },
+            { id: 43, name: 'Bunker Torenbaan 10-1', lat: 52.18757653878036, lng: 4.7427291841895505 },
+            { id: 44, name: 'Bunker Torenbaan 10-2', lat: 52.1874739071902, lng: 4.742776613692841 },
+            { id: 45, name: 'Bunker Torenbaan 10-3', lat: 52.18719921330757, lng: 4.743114363781454 },
+            { id: 46, name: 'Bunker Torenbaan 10-4', lat: 52.18723628211883, lng: 4.742048483200811 },
+            { id: 47, name: 'Bunker Torenbaan 10-5', lat: 52.186907967198024, lng: 4.74130538190715 },
+            { id: 48, name: 'Bunker Torenbaan 10-6', lat: 52.186595166498215, lng: 4.741066513901503 },
+            { id: 49, name: 'Bunker Torenbaan 10-7', lat: 52.18652170562295, lng: 4.740790015574939 },
+            { id: 50, name: 'Bunker Torenbaan 11-1', lat: 52.18774352038359, lng: 4.74471682696887 },
+            { id: 51, name: 'Bunker Torenbaan 11-2', lat: 52.18846519537156, lng: 4.744837697592276 },
+            { id: 52, name: 'Bunker Torenbaan 11-3', lat: 52.18882139619276, lng: 4.745175961531559 },
+            { id: 53, name: 'Bunker Torenbaan 11-4', lat: 52.18894459547921, lng: 4.745266177643658 },
+            { id: 54, name: 'Bunker Torenbaan 11-5', lat: 52.1889566523437, lng: 4.744843638333584 },
+            { id: 55, name: 'Bunker Torenbaan 11-6', lat: 52.189197234100085, lng: 4.745200261136071 },
+            { id: 56, name: 'Bunker Torenbaan 12-1', lat: 52.18725217524819, lng: 4.74540072870329 },
+            { id: 57, name: 'Bunker Torenbaan 12-2', lat: 52.18710798791036, lng: 4.746320662409846 },
+            { id: 58, name: 'Bunker Torenbaan 12-3', lat: 52.18716607556037, lng: 4.746725769001084 },
+            { id: 59, name: 'Bunker Torenbaan 13-1', lat: 52.18927376396785, lng: 4.749169996033966 },
+            { id: 60, name: 'Bunker Torenbaan 13-2', lat: 52.189990204987055, lng: 4.749219697610462 },
+            { id: 61, name: 'Bunker Torenbaan 14-1', lat: 52.189575994099314, lng: 4.750219447650601 },
+            { id: 62, name: 'Bunker Torenbaan 14-2', lat: 52.18940993217962, lng: 4.7499625431695955 },
+            { id: 63, name: 'Bunker Torenbaan 14-3', lat: 52.18935857020767, lng: 4.750384216618988 },
+            { id: 64, name: 'Bunker Torenbaan 14-4', lat: 52.189235300570815, lng: 4.750339552127197 },
+            { id: 65, name: 'Bunker Torenbaan 15-1', lat: 52.18778619175814, lng: 4.751338157039499 },
+            { id: 66, name: 'Bunker Torenbaan 15-2', lat: 52.187056450981935, lng: 4.750186176353979 },
+            { id: 67, name: 'Bunker Torenbaan 15-3', lat: 52.1869844122078, lng: 4.749253888161847 },
+            { id: 68, name: 'Bunker Torenbaan 15-4', lat: 52.18674106799934, lng: 4.749063888849938 },
+            { id: 69, name: 'Bunker Torenbaan 16-1', lat: 52.18582572145678, lng: 4.742414856141507 },
+            { id: 70, name: 'Bunker Torenbaan 16-2', lat: 52.18554060890028, lng: 4.7427277942678066 },
+            { id: 71, name: 'Bunker Torenbaan 16-3', lat: 52.1853472341671, lng: 4.742319941624033 },
+            { id: 72, name: 'Bunker Torenbaan 17-1', lat: 52.18616003943138, lng: 4.741387572772391 },
+            { id: 73, name: 'Bunker Torenbaan 17-2', lat: 52.186146367392254, lng: 4.740814031360684 },
+            { id: 74, name: 'Bunker Torenbaan 17-3 Bruning', lat: 52.186442, lng: 4.741126 },
+            { id: 75, name: 'Bunker Torenbaan 18-1', lat: 52.18763474082362, lng: 4.742436577513874 },
+            { id: 76, name: 'Bunker Torenbaan 18-2', lat: 52.18781395706695, lng: 4.7425021738349775 },
+            { id: 77, name: 'Bunker Torenbaan 18-3', lat: 52.188519117582075, lng: 4.742965136020262 },
+            { id: 78, name: 'Bunker Torenbaan 18-4', lat: 52.18895991586623, lng: 4.743278764096721 },
+            { id: 79, name: 'Bunker Torenbaan 18-5', lat: 52.1891963396305, lng: 4.743494292344832 },
+            { id: 80, name: 'Bunker Torenbaan 18-6', lat: 52.18906279565497, lng: 4.7437428372685275 },
+            { id: 81, name: 'Bunker Bovenlanden 1-1', lat: 52.19107179292548, lng: 4.740815189052999 },
+            { id: 82, name: 'Bunker Bovenlanden 1-2', lat: 52.19089892529218, lng: 4.740296920159244 },
+            { id: 83, name: 'Bunker Bovenlanden 1-3', lat: 52.19131147825923, lng: 4.740617040472106 },
+            { id: 84, name: 'Bunker Bovenlanden 2-1', lat: 52.18926157376472, lng: 4.738014906365509 },
+            { id: 85, name: 'Bunker Bovenlanden 2-2', lat: 52.189183932250046, lng: 4.737865913191248 },
+            { id: 86, name: 'Bunker Bovenlanden 3-1', lat: 52.18791283625699, lng: 4.73806265198158 },
+            { id: 87, name: 'Bunker Bovenlanden 4-1', lat: 52.18906060998751, lng: 4.736910617292255 },
+            { id: 88, name: 'Bunker Bovenlanden 4-2', lat: 52.189256491942594, lng: 4.735997957921799 },
+            { id: 89, name: 'Bunker Bovenlanden 4-3', lat: 52.189311320086816, lng: 4.735499302302713 },
+            { id: 90, name: 'Bunker Bovenlanden 5-1', lat: 52.187506856737556, lng: 4.737794891021746 },
+            { id: 91, name: 'Bunker Bovenlanden 5-2', lat: 52.187276565931576, lng: 4.7376468076301315 },
+            { id: 92, name: 'Bunker Bovenlanden 6-1', lat: 52.18896868049641, lng: 4.738960923297628 },
+            { id: 93, name: 'Bunker Bovenlanden 6-2', lat: 52.189190860871136, lng: 4.739028488563503 },
+            { id: 94, name: 'Bunker Bovenlanden 7-1', lat: 52.18943728089639, lng: 4.740547584397506 },
+            { id: 95, name: 'Bunker Bovenlanden 7-2', lat: 52.18967926545399, lng: 4.740705734790422 },
+            { id: 96, name: 'Bunker Bovenlanden 8-1', lat: 52.188373069128474, lng: 4.740036479100277 },
+            { id: 97, name: 'Bunker Bovenlanden 8-2', lat: 52.18755744170046, lng: 4.7390480348887545 },
+            { id: 98, name: 'Bunker Bovenlanden 9-1', lat: 52.18898348471868, lng: 4.742612117489286 },
+            { id: 99, name: 'Bunker Bovenlanden 9-2', lat: 52.18941297002681, lng: 4.742618566265678 },
+            { id: 100, name: 'Bunker Bovenlanden 9-3', lat: 52.18953105839621, lng: 4.742665806173994 },
+            { id: 101, name: 'Bunker Bovenlanden Driving Range', lat: 52.190732, lng: 4.741576 },
+            { id: 102, name: 'Sfeerstal', lat: 52.1907, lng: 4.7445 }
+        ];
+        let pendingLocation = null;
+        let defaultMapLocationUsed = false;
+        
+        // Login
+        function handleLogin(event) {
+            event.preventDefault();
+            const enteredName = document.getElementById('nameInput').value;
+            const allowedName = getAllowedUserName(enteredName);
+            if (!allowedName) {
+                showStatus('Deze naam staat niet op de whitelist', 'error');
+                document.getElementById('nameInput').focus();
+                return;
+            }
+            
+            currentUser = allowedName;
+            saveLastUserName(allowedName);
+            document.getElementById('loginForm').reset();
+            showPage('mapPage');
+            document.getElementById('userName').textContent = `Welkom, ${allowedName}!`;
+            initMap();
+        }
+        
+        function saveLastUserName(name) {
+            try {
+                localStorage.setItem(LAST_USER_KEY, name);
+            } catch (e) {
+                console.warn('Kon laatst gebruikte naam niet opslaan:', e);
+            }
+        }
+
+        function getLastUserName() {
+            try {
+                return localStorage.getItem(LAST_USER_KEY) || '';
+            } catch (e) {
+                console.warn('Kon laatst gebruikte naam niet laden:', e);
+                return '';
+            }
+        }
+
+        function startWithLastUserName() {
+            const lastName = getLastUserName();
+            const nameInput = document.getElementById('nameInput');
+            if (!lastName) {
+                nameInput.focus();
+                return;
+            }
+
+            const allowedName = getAllowedUserName(lastName);
+            if (!allowedName) {
+                nameInput.value = '';
+                nameInput.focus();
+                return;
+            }
+
+            nameInput.value = allowedName;
+            currentUser = allowedName;
+            showPage('mapPage');
+            document.getElementById('userName').textContent = `Welkom, ${allowedName}!`;
+            initMap();
+        }
+
+        function logout() {
+            if (confirm('Zeker weten dat je uit wilt loggen?')) {
+                currentUser = null;
+                map = null;
+                userMarker = null;
+                savedMarkers = [];
+                showPage('loginPage');
+                document.getElementById('nameInput').focus();
+            }
+        }
+        
+        // Pagina navigatie
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            
+            if (pageId === 'mapPage' && map) {
+                setTimeout(() => map.invalidateSize(), 100);
+            }
+            if (pageId === 'listPage') {
+                renderList();
+            }
+        }
+        
+        function goToMap() {
+            showPage('mapPage');
+        }
+        
+        function goToList() {
+            showPage('listPage');
+        }
+        
+        // Kaart
+        function initMap() {
+            if (map) return;
+            
+            const mapContainer = document.getElementById('mapContainer');
+            map = L.map(mapContainer, {
+                dragging: true,
+                touchZoom: true,
+                doubleClickZoom: true,
+                scrollWheelZoom: false
+            }).setView([DEFAULT_LAT, DEFAULT_LNG], DEFAULT_ZOOM);
+            useDefaultMapLocation();
+            
+            // Kaartlagen
+            const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19,
+                name: 'Open Streetmap'
+            });
+            
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri',
+                maxZoom: 19,
+                name: 'Satelliet'
+            });
+            
+            // Satellietlaag standaard tonen
+            satelliteLayer.addTo(map);
+            
+            // Layer control
+            const baseLayers = {
+                '🛰️ Satelliet': satelliteLayer,
+                '🗺️ Open Streetmap': osmLayer
+            };
+            
+            L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
+            
+            // Referentiepunten — in een aparte LayerGroup zodat deze
+            // altijd boven de GPS-positiemarker wordt gerenderd.
+            bunkerLayer = L.layerGroup().addTo(map);
+
+            referencePoints.forEach(point => {
+                const marker = L.circleMarker([point.lat, point.lng], {
+                    radius: 8,
+                    fillColor: '#9C27B0',
+                    color: '#7B1FA2',
+                    weight: 2,
+                    opacity: 0.9,
+                    fillOpacity: 0.65,
+                    bubblingMouseEvents: false
+                }).addTo(bunkerLayer);
+
+                marker.bindTooltip(point.name, {
+                    permanent: false,
+                    direction: 'top'
+                });
+
+                marker.on('click', function(e) {
+                    // Voorkom dat de kaartklik of Leaflet-popup de actie verstoort.
+                    if (e && e.originalEvent) {
+                        L.DomEvent.stopPropagation(e);
+                        L.DomEvent.preventDefault(e);
+                    }
+
+                    addReferencePointAfterConfirm(point);
+                });
+            });
+            
+            // Alleen bestaande punten kunnen aan de lijst worden toegevoegd.
+            // Een vrije klik op de kaart slaat dus geen locatie meer op.
+            
+            // Gebruiker locatie
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(
+                    position => {
+                        const { latitude, longitude } = position.coords;
+                        updateUserLocation(latitude, longitude);
+                    },
+                    error => {
+                        useDefaultMapLocation();
+                        showStatus('GPS niet beschikbaar', 'info');
+                        console.error('Geolocation error:', error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 8000
+                    }
+                );
+            } else {
+                useDefaultMapLocation();
+                showStatus('GPS niet beschikbaar', 'info');
+            }
+        }
+        
+        function useDefaultMapLocation() {
+            if (!map || defaultMapLocationUsed) return;
+            defaultMapLocationUsed = true;
+            map.setView([DEFAULT_LAT, DEFAULT_LNG], DEFAULT_ZOOM);
+            document.getElementById('locationText').innerHTML =
+                `Standaardpositie: 📍 ${DEFAULT_LAT.toFixed(4)}, ${DEFAULT_LNG.toFixed(4)}`;
+        }
+
+        function updateUserLocation(lat, lng) {
+            if (!map) return;
+            
+            if (userMarker) {
+                userMarker.setLatLng([lat, lng]);
+            } else {
+                userMarker = L.circle([lat, lng], {
+                    radius: 10,
+                    fillColor: '#667eea',
+                    color: '#5568d3',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.7
+                }).addTo(map);
+                // Zorg dat de bunkerlaag altijd boven de GPS-marker blijft
+                if (bunkerLayer) bunkerLayer.bringToFront();
+            }
+            
+            document.getElementById('locationText').innerHTML = 
+                `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+        
+        function addReferencePointAfterConfirm(point) {
+            const allowedName = getAllowedUserName(currentUser);
+            if (!allowedName) {
+                showStatus('Je naam staat niet op de whitelist', 'error');
+                showPage('loginPage');
+                document.getElementById('nameInput').focus();
+                return;
+            }
+            currentUser = allowedName;
+
+            pendingLocation = {
+                lat: point.lat,
+                lng: point.lng,
+                pointName: point.name,
+                timestamp: new Date(),
+                isReferencePoint: true
+            };
+
+            showAddPointModal(point);
+        }
+
+        function populateWhoSelect(selectedName) {
+            const select = document.getElementById('whoInput');
+            if (!select) return;
+
+            const normalizedSelectedName = getAllowedUserName(selectedName) || getAllowedUserName(currentUser) || ALLOWED_USERS[0];
+            select.innerHTML = ALLOWED_USERS.map(name => {
+                const selected = name === normalizedSelectedName ? ' selected' : '';
+                return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)}</option>`;
+            }).join('');
+        }
+
+        function showAddPointModal(point) {
+            const timestamp = pendingLocation && pendingLocation.timestamp instanceof Date
+                ? pendingLocation.timestamp
+                : new Date();
+
+            document.getElementById('confirmModalTitle').textContent = 'Bunker toevoegen?';
+            document.getElementById('confirmModalQuestion').textContent = 'Wil je deze bunker toevoegen aan je lijst?';
+            document.getElementById('modalInfo').innerHTML =
+                `<strong>Naam:</strong> ${escapeHtml(currentUser || '-')}<br>` +
+                `<strong>Punt:</strong> ${escapeHtml(point.name)}<br>` +
+                `<strong>Datum/tijd:</strong> ${timestamp.toLocaleString('nl-NL', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}`;
+
+            const defaultBruningInput = document.querySelector('input[name="bruningInput"][value="false"]');
+            if (defaultBruningInput) defaultBruningInput.checked = true;
+
+            const aantalInputReset = document.getElementById('aantalInput');
+            if (aantalInputReset) aantalInputReset.value = 1;
+            updateAantalVisibility();
+
+            populateWhoSelect(currentUser);
+
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function updateAantalVisibility() {
+            const aantalChoice = document.getElementById('aantalChoice');
+            const checkedInput = document.querySelector('input[name="bruningInput"]:checked');
+            const isJa = !!checkedInput && checkedInput.value === 'true';
+            if (aantalChoice) aantalChoice.style.display = isJa ? 'block' : 'none';
+        }
+
+        document.querySelectorAll('input[name="bruningInput"]').forEach(input => {
+            input.addEventListener('change', updateAantalVisibility);
+        });
+
+        function checkNearbyPoints(lat, lng) {
+            const RADIUS = 30; // meters
+            const earthRadiusM = 6371000;
+            
+            let nearby = [];
+            referencePoints.forEach(point => {
+                const dLat = (point.lat - lat) * Math.PI / 180;
+                const dLng = (point.lng - lng) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                         Math.cos(lat * Math.PI / 180) * Math.cos(point.lat * Math.PI / 180) *
+                         Math.sin(dLng/2) * Math.sin(dLng/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const distance = earthRadiusM * c;
+                
+                if (distance <= RADIUS) {
+                    nearby.push({ ...point, distance: Math.round(distance) });
+                }
+            });
+            
+            let info = `<strong>Coördinaten:</strong><br>
+                       ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            if (nearby.length > 0) {
+                info += `<br><br><strong style="color: #2196F3;">Dichtbij:</strong><br>`;
+                nearby.forEach(p => {
+                    info += `• ${p.name} (${p.distance}m)<br>`;
+                });
+            }
+            
+            document.getElementById('modalInfo').innerHTML = info;
+        }
+        
+        function confirmSaveLocation(confirmed) {
+            document.getElementById('confirmModal').classList.remove('active');
+            
+            if (confirmed && pendingLocation) {
+                const selectedBruningInput = document.querySelector('input[name="bruningInput"]:checked');
+                pendingLocation.bruning = selectedBruningInput
+                    ? selectedBruningInput.value === 'true'
+                    : false;
+
+                if (pendingLocation.bruning) {
+                    const aantalInputEl = document.getElementById('aantalInput');
+                    let aantal = parseInt(aantalInputEl ? aantalInputEl.value : '1', 10);
+                    if (!Number.isFinite(aantal) || aantal < 1) aantal = 1;
+                    if (aantal > 9) aantal = 9;
+                    pendingLocation.bruningAantal = aantal;
+                } else {
+                    pendingLocation.bruningAantal = 0;
+                }
+
+                const whoSelect = document.getElementById('whoInput');
+                const selectedWho = whoSelect ? getAllowedUserName(whoSelect.value) : null;
+                if (!selectedWho) {
+                    showStatus('Kies een geldige naam bij Wie?', 'error');
+                    pendingLocation = null;
+                    return;
+                }
+                pendingLocation.who = selectedWho;
+
+                saveLocation(pendingLocation);
+            }
+            
+            pendingLocation = null;
+        }
+        
+        async function saveLocation(location) {
+            const allowedName = getAllowedUserName(currentUser);
+            if (!allowedName) {
+                showStatus('Opslaan geweigerd: naam staat niet op de whitelist', 'error');
+                return;
+            }
+
+            const timestamp = location.timestamp instanceof Date ? location.timestamp : new Date();
+            const record = {
+                user: allowedName,
+                pointName: location.pointName || 'Onbekend punt',
+                lat: Number(location.lat),
+                lng: Number(location.lng),
+                timestamp: timestamp.toISOString(),
+                bruning: Boolean(location.bruning),
+                bruningAantal: location.bruning ? (Number(location.bruningAantal) || 1) : 0,
+                who: getAllowedUserName(location.who) || allowedName,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                await locationsCollection.add(record);
+                showStatus(`Toegevoegd: ${record.pointName}`, 'success');
+                renderList();
+                if (map) map.invalidateSize();
+            } catch (err) {
+                showStatus('Fout bij opslaan in Firebase', 'error');
+                console.error('Firestore save error:', err);
+            }
+        }
+        
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function renderList() {
+            const container = document.getElementById('listContainer');
+            container.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Locaties laden...</p></div>';
+            
+            try {
+                const snapshot = await locationsCollection.orderBy('timestamp', 'desc').get();
+                const locations = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                if (locations.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>Nog geen locaties vastgelegd</p></div>';
+                    return;
+                }
+                
+                container.innerHTML = locations.map(loc => {
+                    const date = new Date(loc.timestamp);
+                    const safePointName = escapeHtml(loc.pointName || loc.label || 'Onbekend punt');
+                    const safeUser = escapeHtml(loc.user || '-');
+                    const safeLat = Number(loc.lat).toFixed(6);
+                    const safeLng = Number(loc.lng).toFixed(6);
+                    const safeId = escapeHtml(loc.id);
+                    const bruningText = typeof loc.bruning === 'boolean'
+                        ? (loc.bruning
+                            ? `Ja (Aantal: ${Number.isFinite(Number(loc.bruningAantal)) && Number(loc.bruningAantal) > 0 ? Number(loc.bruningAantal) : 1})`
+                            : 'Nee')
+                        : 'Niet vastgelegd';
+                    const safeWho = escapeHtml(loc.who || 'Niet vastgelegd');
+
+                    return `
+                        <div class="list-item">
+                            <div class="list-item-info">
+                                <h3>${safePointName}</h3>
+                                <p>👤 ${safeUser}</p>
+                                <p>📍 ${safeLat}, ${safeLng}</p>
+                                <p>Bruning: ${bruningText}</p>
+                                <p>Wie: ${safeWho}</p>
+                            </div>
+                            <div style="flex: 1;"></div>
+                            <div class="list-item-time">
+                                <div class="date">${date.toLocaleDateString('nl-NL')}</div>
+                                <div class="time">${date.toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'})}</div>
+                            </div>
+                            <!-- Verwijderen is bewust uitgeschakeld in de veilige whitelist-versie. -->
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state"><p>Fout bij laden van locaties uit Firebase</p></div>';
+                showStatus('Fout bij laden uit Firebase', 'error');
+                console.error('Firestore load error:', err);
+            }
+        }
+        
+        async function deleteLocation(id) {
+            showStatus('Verwijderen is uitgeschakeld in de veilige whitelist-versie', 'info');
+        }
+        
+        // Status bericht
+        function showStatus(message, type = 'info') {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message;
+            el.className = `status ${type}`;
+            setTimeout(() => {
+                el.className = 'status';
+            }, 3000);
+        }
+        
+        // Init
+        startWithLastUserName();
+    </script>
+</body>
+</html>

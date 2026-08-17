@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bunker Tracker Dashboard</title>
+<link href="dashboard_1.4a_files/css2_u_X1.css" rel="stylesheet">
+<link rel="stylesheet" href="dashboard_1.4a_files/leaflet_u_X1.css">
+<style>
+  :root {
+    --bg: #0d1a0f;
+    --surface: #132016;
+    --surface2: #1a2d1d;
+    --border: #2a4030;
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --green: #3d7a4e;
+    --green-bright: #5aab6e;
+    --text: #e8ead5;
+    --text-muted: #7a8f7e;
+    --danger: #c0392b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    font-size: 14px;
+  }
+  header {
+    background: linear-gradient(135deg, #0a1409 0%, #1a2d1d 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .flag { font-size: 28px; }
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.04em;
+  }
+  header p { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .header-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  #statusDot { width: 8px; height: 8px; border-radius: 50%; background: #888; flex-shrink: 0; }
+  #statusDot.ok { background: var(--green-bright); box-shadow: 0 0 6px var(--green-bright); }
+  #statusDot.err { background: var(--danger); }
+  #statusText { font-size: 11px; color: var(--text-muted); }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 16px 28px 0;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+  }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
+  .stat-val {
+    font-family: 'Playfair Display', serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--gold-light);
+    line-height: 1.1;
+    margin-top: 4px;
+  }
+  .stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 12px;
+    padding: 12px 28px 20px;
+    height: calc(100vh - 200px);
+    min-height: 500px;
+  }
+  .map-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    color: var(--gold);
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.04em;
+  }
+  #map { flex: 1; min-height: 400px; }
+
+  /* Legend */
+  .map-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.4); flex-shrink: 0; }
+
+  .right-panel { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .chart-wrap { flex: 1; position: relative; min-height: 0; }
+
+  .list-panel, .player-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .list-panel.collapsed, .player-panel.collapsed {
+    max-height: 145px;
+    overflow: hidden;
+  }
+  .list-panel.expanded, .player-panel.expanded {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .list-panel::-webkit-scrollbar, .player-panel::-webkit-scrollbar { width: 4px; }
+  .list-panel::-webkit-scrollbar-track, .player-panel::-webkit-scrollbar-track { background: transparent; }
+  .list-panel::-webkit-scrollbar-thumb, .player-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .list-panel, .player-panel { cursor: pointer; }
+  .list-panel:hover .panel-title, .player-panel:hover .panel-title { color: var(--gold-light); }
+  .click-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    padding-top: 4px;
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+  }
+
+  .player-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #1e2e22;
+  }
+  .player-row:last-child { border-bottom: none; }
+  .player-avatar {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--green), var(--gold));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0d1a0f;
+    flex-shrink: 0;
+  }
+  .player-name { flex: 1; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .player-bar-wrap { width: 60px; height: 5px; background: #1e2e22; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .player-bar { height: 100%; background: linear-gradient(90deg, var(--gold), var(--green-bright)); border-radius: 3px; }
+  .player-count {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    color: var(--gold-light);
+    width: 26px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .bunker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #1e2e22;
+  }
+  .bunker-row:last-child { border-bottom: none; }
+  .rank {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .rank.gold-rank { color: var(--gold); }
+  .rank.silver-rank { color: #c0c0c0; }
+  .rank.bronze-rank { color: #cd7f32; }
+  .bunker-name { flex: 1; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .visit-bar-wrap { width: 60px; height: 5px; background: #1e2e22; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .visit-bar { height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); border-radius: 3px; }
+  .visit-count {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    color: var(--gold-light);
+    width: 26px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .loading-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-muted);
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ✅ No dark filter — full colour Google Maps style */
+  .leaflet-container { background: #e8e0d8 !important; }
+
+  .leaflet-popup-content-wrapper {
+    background: #fff !important;
+    color: #333 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    border: none !important;
+    padding: 2px !important;
+  }
+  .leaflet-popup-tip { background: #fff !important; }
+  .leaflet-popup-content { margin: 10px 14px !important; }
+  .popup-name { font-family: 'Playfair Display', serif; font-size: 15px; color: #1a6b36; font-weight: 700; margin-bottom: 5px; }
+  .popup-row { font-size: 12px; color: #666; margin: 3px 0; }
+  .popup-row span { color: #222; font-weight: 500; }
+  .popup-badge {
+    display: inline-block;
+    background: #1a6b36;
+    color: #fff;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 5px;
+  }
+
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .main { grid-template-columns: 1fr; height: auto; }
+  }
+</style>
+<style>:is([id*='google_ads_iframe'],[id*='taboola-'],.taboolaHeight,.taboola-placeholder,#top-ad,#credential_picker_container,#credentials-picker-container,#credential_picker_iframe,#onetap_google_intermediate_iframe,[id*='google-one-tap-iframe'],#google-one-tap-popup-container,.google-one-tap__module,.google-one-tap-modal-div,.adthrive-auto-injected-player-container,.adthrive[id^="cls-video-container"]:has(.adthrive-auto-injected-player-container),#amp_floatingAdDiv,#ez-content-blocker-container) {display:none!important;min-height:0!important;height:0!important;}</style></head>
+<body>
+
+<header>
+  <div class="flag">⛳</div>
+  <div>
+    <h1>BUNKER TRACKER</h1>
+    <p>Dashboard 1.4</p>
+  </div>
+  <div class="header-right">
+    <div id="statusDot" class="ok"></div>
+    <div id="statusText">127 records loaded</div>
+  </div>
+</header>
+
+<div class="stats-row">
+  <div class="stat-card"><div class="stat-label">Totaal Aantal</div><div class="stat-val" id="statTotal">127</div></div>
+  <div class="stat-card"><div class="stat-label">Aantal Bunkers</div><div class="stat-val" id="statUnique">55</div></div>
+  <div class="stat-card"><div class="stat-label">Meest bezocht</div><div class="stat-val" id="statTopCount">12</div><div class="stat-sub" id="statTopName">Bunker Torenbaan 1-3</div></div>
+  <div class="stat-card"><div class="stat-label">Bruninkjes</div><div class="stat-val" id="statBurning">27</div><div class="stat-sub">bruning = true</div></div>
+</div>
+
+<div class="main">
+  <div class="map-panel">
+    <div class="panel-title">🗺️ Bunker Locaties</div>
+    <div id="map" class="leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" style="position: relative;" tabindex="0"><div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(-490px, -124px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 20; transform: translate3d(0px, 0px, 0px) scale(1);"><img alt="" src="dashboard_1.4a_files/21591_004_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(762px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_005_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1018px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_005_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(762px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_004_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1018px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_005_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(762px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1018px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_003_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(506px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_007_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1274px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_006_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(506px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_008_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1274px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_002_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(506px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_007_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1274px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(762px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_007_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1018px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_005_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(762px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_003_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1018px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_005_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(506px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_006_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1274px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(250px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_002_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1530px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_008_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(506px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1274px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_002_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(250px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_003_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1530px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_008_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(250px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_003_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1530px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_004_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(250px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_008_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1530px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_007_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(250px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_002_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1530px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_008_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-6px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21591_006_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1786px, 377px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_007_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-6px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21590_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1786px, 121px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_004_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-6px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21592_006_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1786px, 633px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_003_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-6px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21589_002_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1786px, -135px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_004_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-6px, 889px, 0px); opacity: 1;"><img alt="" src="dashboard_1.4a_files/21593_006_u_X1.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1786px, 889px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-overlay-pane"><svg pointer-events="none" class="leaflet-zoom-animated" width="1044" height="833" style="transform: translate3d(403px, 55px, 0px);" viewBox="403 55 1044 833"><g><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#e74c3c" fill-opacity="0.88" fill-rule="evenodd" d="M996,217a27,27 0 1,0 54,0 a27,27 0 1,0 -54,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M833,602a18,18 0 1,0 36,0 a18,18 0 1,0 -36,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M1181,481a17,17 0 1,0 34,0 a17,17 0 1,0 -34,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M757,729a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M1014,656a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M944,552a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M848,628a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M784,728a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f39c12" fill-opacity="0.88" fill-rule="evenodd" d="M872,515a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1195,659a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M965,516a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M781,671a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1087,498a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M946,515a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1107,310a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M772,706a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1058,588a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1093,295a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1019,165a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1061,490a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M972,185a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M849,620a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M967,294a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1132,405a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1095,420a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1032,569a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1052,552a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M901,220a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M849,775a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M922,243a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M996,232a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1076,629a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1153,665a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M817,646a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M920,268a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M965,497a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M749,478a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1046,480a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1069,259a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M886,497a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1036,651a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M630,492a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1011,444a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M987,435a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1150,491a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M943,607a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M836,753a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1112,325a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M940,228a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1073,248a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1090,318a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1017,401a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1083,268a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M861,548a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#2ecc71" fill-opacity="0.88" fill-rule="evenodd" d="M1153,436a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 "></path></g></svg></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-marker-pane"></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(8609700px, 5527390px, 0px) scale(32768);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in" aria-disabled="false"><span aria-hidden="true">+</span></a><a class="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out" aria-disabled="false"><span aria-hidden="true">−</span></a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com/" title="A JavaScript library for interactive maps"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" class="leaflet-attribution-flag"><path fill="#4C7BE1" d="M0 0h12v4H0z"></path><path fill="#FFD500" d="M0 4h12v3H0z"></path><path fill="#E0BC00" d="M0 7h12v1H0z"></path></svg> Leaflet</a> <span aria-hidden="true">|</span> © <a href="https://carto.com/">CARTO</a> © <a href="https://www.openstreetmap.org/copyright">OSM</a></div></div></div></div>
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#2ecc71"></div>Enkele bezoekjes</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f39c12"></div>Af en toe</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e74c3c"></div>Meest bezocht</div>
+      <div class="legend-item" style="margin-left:auto; color: #7a8f7e; font-size:10px;">Marker size = Aantal keren</div>
+    </div>
+  </div>
+  <div class="right-panel">
+    <div class="chart-panel">
+      <div class="panel-title" style="padding:0 0 8px">📊 Bezoekjes per Bunker</div>
+      <div class="chart-wrap"><canvas id="barChart" style="display: block; box-sizing: border-box; height: 397px; width: 310px;" width="310" height="397"></canvas></div>
+    </div>
+    <div class="list-panel collapsed" id="bunkerPanel" onclick="togglePanel('bunkerPanel')" title="Klik om uit te klappen">
+      <div class="panel-title" style="padding:0 0 8px; border:none">🏆 Bunker Leaderboard</div>
+      <div id="leaderboard"><div class="bunker-row" data-lb-extra="">
+      <div class="rank gold-rank">1</div>
+      <div class="bunker-name">Bunker Torenbaan 1-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:100%"></div></div>
+      <div class="visit-count">12</div>
+    </div><div class="bunker-row" data-lb-extra="">
+      <div class="rank silver-rank">2</div>
+      <div class="bunker-name">Bunker Torenbaan 18-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:50%"></div></div>
+      <div class="visit-count">6</div>
+    </div><div class="bunker-row" data-lb-extra="">
+      <div class="rank bronze-rank">3</div>
+      <div class="bunker-name">Bunker Torenbaan 14-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:42%"></div></div>
+      <div class="visit-count">5</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">4</div>
+      <div class="bunker-name">Bunker Torenbaan 17-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">5</div>
+      <div class="bunker-name">Bunker Torenbaan 12-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">6</div>
+      <div class="bunker-name">Bunker Torenbaan 11-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">7</div>
+      <div class="bunker-name">Bunker Torenbaan 10-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">8</div>
+      <div class="bunker-name">Bunker Torenbaan 17-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">9</div>
+      <div class="bunker-name">Bunker Torenbaan 18-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:33%"></div></div>
+      <div class="visit-count">4</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">10</div>
+      <div class="bunker-name">Bunker Torenbaan 15-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">11</div>
+      <div class="bunker-name">Bunker Torenbaan 11-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">12</div>
+      <div class="bunker-name">Bunker Torenbaan 10-5</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">13</div>
+      <div class="bunker-name">Bunker Torenbaan 8-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">14</div>
+      <div class="bunker-name">Bunker Torenbaan 11-5</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">15</div>
+      <div class="bunker-name">Bunker Torenbaan 5-8</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">16</div>
+      <div class="bunker-name">Bunker Torenbaan 17-3 Bruning</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">17</div>
+      <div class="bunker-name">Bunker Torenbaan 6-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">18</div>
+      <div class="bunker-name">Bunker Torenbaan 5-6</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:25%"></div></div>
+      <div class="visit-count">3</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">19</div>
+      <div class="bunker-name">Bunker Torenbaan 4-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">20</div>
+      <div class="bunker-name">Bunker Torenbaan 8-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">21</div>
+      <div class="bunker-name">Bunker Torenbaan 4-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">22</div>
+      <div class="bunker-name">Bunker Torenbaan 10-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">23</div>
+      <div class="bunker-name">Bunker Torenbaan 2-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">24</div>
+      <div class="bunker-name">Bunker Torenbaan 8-6</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">25</div>
+      <div class="bunker-name">Bunker Torenbaan 8-5</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">26</div>
+      <div class="bunker-name">Bunker Torenbaan 6-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">27</div>
+      <div class="bunker-name">Bunker Torenbaan 6-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">28</div>
+      <div class="bunker-name">Bunker Torenbaan 3-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">29</div>
+      <div class="bunker-name">Bunker Torenbaan 16-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">30</div>
+      <div class="bunker-name">Bunker Torenbaan 3-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">31</div>
+      <div class="bunker-name">Bunker Torenbaan 1-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">32</div>
+      <div class="bunker-name">Bunker Torenbaan 6-7</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">33</div>
+      <div class="bunker-name">Bunker Torenbaan 15-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">34</div>
+      <div class="bunker-name">Bunker Torenbaan 10-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:17%"></div></div>
+      <div class="visit-count">2</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">35</div>
+      <div class="bunker-name">Bunker Torenbaan 3-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">36</div>
+      <div class="bunker-name">Bunker Torenbaan 11-6</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">37</div>
+      <div class="bunker-name">Bunker Bovenlanden 7-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">38</div>
+      <div class="bunker-name">Bunker Torenbaan 6-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">39</div>
+      <div class="bunker-name">Bunker Torenbaan 5-4</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">40</div>
+      <div class="bunker-name">Bunker Torenbaan 18-5</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">41</div>
+      <div class="bunker-name">Bunker Torenbaan 12-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">42</div>
+      <div class="bunker-name">Bunker Bovenlanden 2-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">43</div>
+      <div class="bunker-name">Bunker Torenbaan 9-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">44</div>
+      <div class="bunker-name">Bunker Torenbaan 9-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">45</div>
+      <div class="bunker-name">Bunker Torenbaan 13-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">46</div>
+      <div class="bunker-name">Bunker Torenbaan 11-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">47</div>
+      <div class="bunker-name">Bunker Torenbaan 16-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">48</div>
+      <div class="bunker-name">Bunker Torenbaan 5-9</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">49</div>
+      <div class="bunker-name">Bunker Torenbaan 3-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">50</div>
+      <div class="bunker-name">Bunker Torenbaan 5-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">51</div>
+      <div class="bunker-name">Bunker Torenbaan 5-7</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">52</div>
+      <div class="bunker-name">Bunker Torenbaan 9-1</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">53</div>
+      <div class="bunker-name">Bunker Torenbaan 5-5</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">54</div>
+      <div class="bunker-name">Bunker Torenbaan 18-3</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div><div class="bunker-row" data-lb-extra="" style="display:none">
+      <div class="rank ">55</div>
+      <div class="bunker-name">Bunker Torenbaan 13-2</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:8%"></div></div>
+      <div class="visit-count">1</div>
+    </div></div>
+      <div class="click-hint" id="bunkerHint">▼ klik om meer te zien</div>
+    </div>
+    <div class="player-panel collapsed" id="playerPanel" onclick="togglePanel('playerPanel')" title="Klik om uit te klappen">
+      <div class="panel-title" style="padding:0 0 8px; border:none">🥇 Spelers Leaderboard</div>
+      <div id="playerLeaderboard"><div class="player-row" data-pl-extra="">
+        <div class="rank gold-rank">1</div>
+        <div class="player-avatar">M</div>
+        <div class="player-name">Martijn van Delft</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:100%"></div></div>
+        <div class="player-count">28</div>
+      </div><div class="player-row" data-pl-extra="">
+        <div class="rank silver-rank">2</div>
+        <div class="player-avatar">A</div>
+        <div class="player-name">Alfa Daradjat</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:64%"></div></div>
+        <div class="player-count">18</div>
+      </div><div class="player-row" data-pl-extra="">
+        <div class="rank bronze-rank">3</div>
+        <div class="player-avatar">M</div>
+        <div class="player-name">Mark-Lucas van Delft</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:54%"></div></div>
+        <div class="player-count">15</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">4</div>
+        <div class="player-avatar">L</div>
+        <div class="player-name">Lars Breukers</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:43%"></div></div>
+        <div class="player-count">12</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">5</div>
+        <div class="player-avatar">M</div>
+        <div class="player-name">Martijn Koek</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:39%"></div></div>
+        <div class="player-count">11</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">6</div>
+        <div class="player-avatar">C</div>
+        <div class="player-name">Conrad van Houten</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:39%"></div></div>
+        <div class="player-count">11</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">7</div>
+        <div class="player-avatar">C</div>
+        <div class="player-name">Charles Majoie</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:36%"></div></div>
+        <div class="player-count">10</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">8</div>
+        <div class="player-avatar">D</div>
+        <div class="player-name">Danny Hillebrand</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:32%"></div></div>
+        <div class="player-count">9</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">9</div>
+        <div class="player-avatar">H</div>
+        <div class="player-name">Harry van Mierlo</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:21%"></div></div>
+        <div class="player-count">6</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">10</div>
+        <div class="player-avatar">J</div>
+        <div class="player-name">Jeroen Bruning</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:14%"></div></div>
+        <div class="player-count">4</div>
+      </div><div class="player-row" data-pl-extra="" style="display:none">
+        <div class="rank ">11</div>
+        <div class="player-avatar">H</div>
+        <div class="player-name">Hugo van der Geest</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:11%"></div></div>
+        <div class="player-count">3</div>
+      </div></div>
+      <div class="click-hint" id="playerHint">▼ klik om meer te zien</div>
+    </div>
+  </div>
+</div>
+
+<script src="dashboard_1.4a_files/firebase-app-compat_u_X1.js"></script>
+<script src="dashboard_1.4a_files/firebase-firestore-compat_u_X1.js"></script>
+<script src="dashboard_1.4a_files/leaflet_u_X1.js"></script>
+<script src="dashboard_1.4a_files/chart.umd.min_u_X1.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAmowVAbGv6cqEFKdn_wA8ji2Ga95-8CtI",
+  authDomain: "bunker-tracker-b3b95.firebaseapp.com",
+  databaseURL: "https://bunker-tracker-b3b95-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "bunker-tracker-b3b95",
+  storageBucket: "bunker-tracker-b3b95.firebasestorage.app",
+  messagingSenderId: "354730814184",
+  appId: "1:354730814184:web:5f8dfb2bc3f357a850b75d"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const map = L.map('map', { zoomControl: true, attributionControl: true });
+
+// ✅ CartoDB Voyager — closest free tile to Google Maps
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://carto.com/">CARTO</a> © <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  subdomains: 'abcd',
+  maxZoom: 20
+}).addTo(map);
+
+map.setView([52.3, 5.3], 7);
+
+let barChartInstance = null;
+
+function getMarkerColor(count, max) {
+  const ratio = count / max;
+  if (ratio < 0.33) return '#2ecc71';
+  if (ratio < 0.66) return '#f39c12';
+  return '#e74c3c';
+}
+
+function renderDashboard(records) {
+  const groups = {};
+  records.forEach(r => {
+    const key = r.pointName || r.Pointname || r.pointname || 'Unknown';
+    if (!groups[key]) {
+      groups[key] = {
+        name: key,
+        lat: parseFloat(r.lat || r.Lat || 0),
+        lng: parseFloat(r.lng || r.Lng || 0),
+        count: 0, burning: 0, users: new Set()
+      };
+    }
+    groups[key].count++;
+    const b = r.bruning || r.Bruning;
+    if (b === true || b === 'Ja' || b === 'ja') groups[key].burning++;
+    const u = r.user || r.User; if (u) groups[key].users.add(u);
+    const w = r.who || r.Who; if (w) groups[key].users.add(w);
+  });
+
+  const sorted = Object.values(groups).sort((a, b) => b.count - a.count);
+  const maxCount = sorted[0]?.count || 1;
+  const totalBurning = records.filter(r => {
+    const b = r.bruning || r.Bruning;
+    return b === true || b === 'Ja' || b === 'ja';
+  }).length;
+
+  document.getElementById('statTotal').textContent = records.length;
+  document.getElementById('statUnique').textContent = sorted.length;
+  document.getElementById('statTopCount').textContent = sorted[0]?.count || 0;
+  document.getElementById('statTopName').textContent = sorted[0]?.name || '—';
+  document.getElementById('statBurning').textContent = totalBurning;
+
+  // Map markers
+  map.eachLayer(l => { if (l instanceof L.CircleMarker) map.removeLayer(l); });
+  const bounds = [];
+  sorted.forEach(b => {
+    if (!b.lat || !b.lng) return;
+    const radius = 9 + (b.count / maxCount) * 18;
+    const color = getMarkerColor(b.count, maxCount);
+    L.circleMarker([b.lat, b.lng], {
+      radius,
+      fillColor: color,
+      color: '#fff',
+      weight: 2,
+      fillOpacity: 0.88
+    }).addTo(map).bindPopup(`
+      <div class="popup-name">${b.name}</div>
+      <div class="popup-row">📍 ${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}</div>
+      <div class="popup-row">🔥 Bruning: <span>${b.burning} time${b.burning !== 1 ? 's' : ''}</span></div>
+      <div><span class="popup-badge">⛳ ${b.count} visit${b.count !== 1 ? 's' : ''}</span></div>
+    `);
+    bounds.push([b.lat, b.lng]);
+  });
+  if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+
+  // Bar chart
+  const top = sorted.slice(0, 12);
+  if (barChartInstance) barChartInstance.destroy();
+  barChartInstance = new Chart(document.getElementById('barChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: top.map(b => b.name.length > 14 ? b.name.substring(0,13)+'…' : b.name),
+      datasets: [{
+        data: top.map(b => b.count),
+        backgroundColor: top.map(b => getMarkerColor(b.count, maxCount)),
+        borderRadius: 4, borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2d1d', borderColor: '#2a4030', borderWidth: 1,
+          titleColor: '#c9a84c', bodyColor: '#e8ead5',
+          callbacks: {
+            title: (items) => top[items[0].dataIndex]?.name || '',
+            label: (item) => ` ${item.raw} visit${item.raw !== 1 ? 's' : ''}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#1e2e22' }, ticks: { color: '#7a8f7e', font: { size: 10 }, maxRotation: 40 } },
+        y: { grid: { color: '#1e2e22' }, ticks: { color: '#7a8f7e', font: { size: 10 }, stepSize: 1 }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Leaderboard — show top 3, rest hidden
+  document.getElementById('leaderboard').innerHTML = sorted.map((b, i) => {
+    const pct = Math.round((b.count / maxCount) * 100);
+    const rankClass = i === 0 ? 'gold-rank' : i === 1 ? 'silver-rank' : i === 2 ? 'bronze-rank' : '';
+    const hidden = i >= 3 ? 'style="display:none"' : '';
+    return `<div class="bunker-row" data-lb-extra ${hidden}>
+      <div class="rank ${rankClass}">${i+1}</div>
+      <div class="bunker-name">${b.name}</div>
+      <div class="visit-bar-wrap"><div class="visit-bar" style="width:${pct}%"></div></div>
+      <div class="visit-count">${b.count}</div>
+    </div>`;
+  }).join('');
+
+  // Spelers Leaderboard — show top 3, rest hidden
+  const playerCounts = {};
+  records.forEach(r => {
+    const player = r.who || r.Who || null;
+    if (player && player.toString().trim()) {
+      const key = player.toString().trim();
+      playerCounts[key] = (playerCounts[key] || 0) + 1;
+    }
+  });
+  const playersSorted = Object.entries(playerCounts).sort((a, b) => b[1] - a[1]);
+  const maxPlayerCount = playersSorted[0]?.[1] || 1;
+
+  if (playersSorted.length === 0) {
+    document.getElementById('playerLeaderboard').innerHTML = '<div class="loading-msg"><span>Geen spelersdata gevonden</span></div>';
+  } else {
+    document.getElementById('playerLeaderboard').innerHTML = playersSorted.map(([name, count], i) => {
+      const pct = Math.round((count / maxPlayerCount) * 100);
+      const initial = name.charAt(0).toUpperCase();
+      const rankClass = i === 0 ? 'gold-rank' : i === 1 ? 'silver-rank' : i === 2 ? 'bronze-rank' : '';
+      const hidden = i >= 3 ? 'style="display:none"' : '';
+      return `<div class="player-row" data-pl-extra ${hidden}>
+        <div class="rank ${rankClass}">${i+1}</div>
+        <div class="player-avatar">${initial}</div>
+        <div class="player-name">${name}</div>
+        <div class="player-bar-wrap"><div class="player-bar" style="width:${pct}%"></div></div>
+        <div class="player-count">${count}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function togglePanel(panelId) {
+  const panel = document.getElementById(panelId);
+  const isExpanded = panel.classList.contains('expanded');
+  const hintId = panelId === 'bunkerPanel' ? 'bunkerHint' : 'playerHint';
+  const hint = document.getElementById(hintId);
+  const extras = panelId === 'bunkerPanel'
+    ? document.querySelectorAll('#leaderboard [data-lb-extra]')
+    : document.querySelectorAll('#playerLeaderboard [data-pl-extra]');
+
+  if (isExpanded) {
+    panel.classList.remove('expanded');
+    panel.classList.add('collapsed');
+    hint.textContent = '▼ klik om meer te zien';
+    extras.forEach((el, i) => { if (i >= 3) el.style.display = 'none'; });
+  } else {
+    panel.classList.remove('collapsed');
+    panel.classList.add('expanded');
+    hint.textContent = '▲ klik om minder te zien';
+    extras.forEach(el => { el.style.display = ''; });
+  }
+}
+
+function setStatus(ok, msg) {
+  document.getElementById('statusDot').className = ok ? 'ok' : 'err';
+  document.getElementById('statusText').textContent = msg;
+}
+
+async function loadData() {
+  try {
+    const snap = await db.collection('bunker_locations').get();
+    if (snap.empty) {
+      setStatus(false, 'Collection empty or not found');
+      document.getElementById('leaderboard').innerHTML = '<div class="loading-msg"><span>No records found</span></div>';
+      return;
+    }
+    const records = snap.docs.map(d => d.data());
+    setStatus(true, `${records.length} records loaded`);
+    renderDashboard(records);
+  } catch (e) {
+    console.error(e);
+    setStatus(false, 'Error — ' + e.code);
+    document.getElementById('leaderboard').innerHTML =
+      `<div class="loading-msg"><span style="color:#c0392b">${e.message}</span></div>`;
+  }
+}
+
+loadData();
+</script>
+
+
+</body></html>
